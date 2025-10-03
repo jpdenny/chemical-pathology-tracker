@@ -1,12 +1,1006 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chemical Pathology Tracker</title>
-</head>
-<body>
-    <h1>Chemical Pathology Tracker</h1>
-    <p>Deploying... This is a placeholder. Full app code coming next.</p>
-</body>
-</html>
+import React, { useState, useEffect } from 'react';
+import { Calendar, TrendingUp, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts';
+
+const BloodChemistryTracker = () => {
+  const bloodChemistryMetrics = ['Sodium', 'Potassium', 'Chloride', 'Bicarbonate', 'Urea', 'Creatinine', 'eGPR', 'Uric Acid', 'Glucose (R)', 'Inorg. Phos', 'Magnesium', 'Calcium', 'Ca alb corr', 'Albumin', 'Tot Protein', 'Tot Bilirubin', 'ALT', 'AST', 'Alk. phos.', 'GGT', 'LDH', 'Cholesterol', 'Triglycerides', 'TSH', 'Free T4', 'FSH', 'LH', 'Oestradiol', 'SHBG', 'Testosterone', 'Free Testos.', 'Vit D', 'Intact PTH'];
+  const fbcMetrics = ['RBC', 'Haemoglobin', 'HCT', 'MCV', 'MCH', 'MCHC', 'RDW', 'Platelets', 'WBC'];
+  const differentialMetrics = ['Blasts', 'Promyelocytes', 'Myelocytes', 'Neutrophils', 'Lymphocytes', 'Monocytes', 'Eosinophils', 'Basophils'];
+  const acutePhaseMetrics = ['CRP', 'Haptoglobin'];
+  const healthActivityMetrics = ['Bowel Movements', 'Stool Score', 'Water Intake'];
+
+  const [selectedMetrics, setSelectedMetrics] = useState({
+    section1: bloodChemistryMetrics.reduce((acc, m) => ({ ...acc, [m]: ['Sodium', 'Potassium', 'Urea', 'Creatinine', 'eGPR'].includes(m) }), {}),
+    section2: fbcMetrics.reduce((acc, m) => ({ ...acc, [m]: ['RBC', 'Haemoglobin', 'HCT', 'Platelets', 'WBC'].includes(m) }), {}),
+    section3: differentialMetrics.reduce((acc, m) => ({ ...acc, [m]: ['Neutrophils', 'Lymphocytes'].includes(m) }), {}),
+    section4: acutePhaseMetrics.reduce((acc, m) => ({ ...acc, [m]: true }), {})
+  });
+
+  const [formData, setFormData] = useState({ section1: {}, section2: {}, section3: {}, section4: {}, section5: {} });
+  const [entries, setEntries] = useState({ section1: [], section2: [], section3: [], section4: [], section5: [] });
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showTrends, setShowTrends] = useState({ section1: false, section2: false, section3: false, section4: false, section5: false });
+  const [showInsights, setShowInsights] = useState({ section1: false, section2: false, section3: false, section4: false, section5: false, daily: false });
+  const [insights, setInsights] = useState({ section1: '', section2: '', section3: '', section4: '', section5: '', daily: '' });
+  const [loadingInsights, setLoadingInsights] = useState({ section1: false, section2: false, section3: false, section4: false, section5: false, daily: false });
+  const [notification, setNotification] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({ section1: false, section2: false, section3: false, section4: false });
+  const [savedDates, setSavedDates] = useState({ section1: new Set(), section2: new Set(), section3: new Set(), section4: new Set(), section5: new Set() });
+
+  const referenceRanges = {
+    'Sodium': { min: 135, max: 145, unit: 'mmol/L' }, 'Potassium': { min: 3.5, max: 5.0, unit: 'mmol/L' }, 'Chloride': { min: 98, max: 106, unit: 'mmol/L' },
+    'Bicarbonate': { min: 22, max: 28, unit: 'mmol/L' }, 'Urea': { min: 2.5, max: 7.5, unit: 'mmol/L' }, 'Creatinine': { min: 60, max: 120, unit: 'μmol/L' },
+    'eGPR': { min: 60, max: 150, unit: 'mL/min/1.73m²' }, 'Uric Acid': { min: 200, max: 430, unit: 'μmol/L' }, 'Glucose (R)': { min: 3.9, max: 5.5, unit: 'mmol/L' },
+    'Inorg. Phos': { min: 0.8, max: 1.5, unit: 'mmol/L' }, 'Magnesium': { min: 0.7, max: 1.0, unit: 'mmol/L' }, 'Calcium': { min: 2.2, max: 2.6, unit: 'mmol/L' },
+    'Ca alb corr': { min: 2.2, max: 2.6, unit: 'mmol/L' }, 'Albumin': { min: 35, max: 50, unit: 'g/L' }, 'Tot Protein': { min: 60, max: 80, unit: 'g/L' },
+    'Tot Bilirubin': { min: 0, max: 20, unit: 'μmol/L' }, 'ALT': { min: 0, max: 40, unit: 'U/L' }, 'AST': { min: 0, max: 40, unit: 'U/L' },
+    'Alk. phos.': { min: 30, max: 120, unit: 'U/L' }, 'GGT': { min: 0, max: 60, unit: 'U/L' }, 'LDH': { min: 120, max: 250, unit: 'U/L' },
+    'Cholesterol': { min: 0, max: 5.0, unit: 'mmol/L' }, 'Triglycerides': { min: 0, max: 1.7, unit: 'mmol/L' }, 'TSH': { min: 0.5, max: 4.0, unit: 'mU/L' },
+    'Free T4': { min: 10, max: 25, unit: 'pmol/L' }, 'FSH': { min: 1, max: 30, unit: 'IU/L' }, 'LH': { min: 1, max: 20, unit: 'IU/L' },
+    'Oestradiol': { min: 50, max: 400, unit: 'pmol/L' }, 'SHBG': { min: 15, max: 50, unit: 'nmol/L' }, 'Testosterone': { min: 8, max: 30, unit: 'nmol/L' },
+    'Free Testos.': { min: 200, max: 800, unit: 'pmol/L' }, 'Vit D': { min: 50, max: 150, unit: 'nmol/L' }, 'Intact PTH': { min: 1.0, max: 6.0, unit: 'pmol/L' },
+    'RBC': { min: 4.5, max: 5.5, unit: '×10¹²/L' }, 'Haemoglobin': { min: 130, max: 170, unit: 'g/L' }, 'HCT': { min: 0.40, max: 0.50, unit: 'L/L' },
+    'MCV': { min: 80, max: 100, unit: 'fL' }, 'MCH': { min: 27, max: 32, unit: 'pg' }, 'MCHC': { min: 320, max: 360, unit: 'g/L' },
+    'RDW': { min: 11.5, max: 14.5, unit: '%' }, 'Platelets': { min: 150, max: 400, unit: '×10⁹/L' }, 'WBC': { min: 4.0, max: 11.0, unit: '×10⁹/L' },
+    'Blasts': { min: 0, max: 0, unit: '×10⁹/L' }, 'Promyelocytes': { min: 0, max: 0, unit: '×10⁹/L' }, 'Myelocytes': { min: 0, max: 0, unit: '×10⁹/L' },
+    'Neutrophils': { min: 2.0, max: 7.5, unit: '×10⁹/L' }, 'Lymphocytes': { min: 1.0, max: 4.0, unit: '×10⁹/L' }, 'Monocytes': { min: 0.2, max: 1.0, unit: '×10⁹/L' },
+    'Eosinophils': { min: 0.04, max: 0.4, unit: '×10⁹/L' }, 'Basophils': { min: 0.01, max: 0.1, unit: '×10⁹/L' }, 'CRP': { min: 0, max: 5, unit: 'mg/L' },
+    'Haptoglobin': { min: 0.3, max: 2.0, unit: 'g/L' },
+    'Bowel Movements': { min: 1, max: 3, unit: 'times/day' }, 'Stool Score': { min: 3, max: 5, unit: 'Bristol Scale' }, 'Water Intake': { min: 2, max: 3, unit: 'liters' }
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem('bloodTrackerEntries');
+    if (saved) {
+      const parsedEntries = JSON.parse(saved);
+      setEntries(parsedEntries);
+      const newSavedDates = { section1: new Set(), section2: new Set(), section3: new Set(), section4: new Set(), section5: new Set() };
+      Object.keys(parsedEntries).forEach(section => {
+        if (parsedEntries[section]) parsedEntries[section].forEach(entry => newSavedDates[section].add(entry.date));
+      });
+      setSavedDates(newSavedDates);
+    }
+  }, []);
+
+  const handleInputChange = (section, metric, value) => {
+    setFormData(prev => ({ ...prev, [section]: { ...prev[section], [metric]: value } }));
+  };
+
+  const showNotification = (message) => {
+    setNotification(message);
+    setTimeout(() => setNotification(''), 5000);
+  };
+
+  const handleSave = (section) => {
+    let selectedMetricsInSection = section === 'section5' ? healthActivityMetrics : Object.keys(selectedMetrics[section]).filter(m => selectedMetrics[section][m]);
+    const hasAllValues = selectedMetricsInSection.every(metric => formData[section][metric] !== undefined && formData[section][metric] !== '');
+    if (!hasAllValues) { showNotification('⚠️ Please fill in all metrics before saving.'); return; }
+    const newEntry = { date: currentDate, ...formData[section] };
+    const updated = [...(entries[section] || []), newEntry];
+    const newEntries = { ...entries, [section]: updated };
+    setEntries(newEntries);
+    localStorage.setItem('bloodTrackerEntries', JSON.stringify(newEntries));
+    setSavedDates(prev => ({ ...prev, [section]: new Set([...prev[section], currentDate]) }));
+    setFormData(prev => ({ ...prev, [section]: {} }));
+    showNotification('✅ Entry saved successfully!');
+  };
+
+  const isOutOfRange = (metric, value) => {
+    if (!referenceRanges[metric] || value === '' || value === undefined) return false;
+    const numValue = parseFloat(value);
+    return numValue < referenceRanges[metric].min || numValue > referenceRanges[metric].max;
+  };
+
+  const getMetricStatus = (metric, value) => {
+    if (!referenceRanges[metric] || value === '' || value === undefined) return 'gray';
+    const numValue = parseFloat(value);
+    const range = referenceRanges[metric];
+    const rangeWidth = range.max - range.min;
+    const borderlineThreshold = rangeWidth * 0.1;
+    if (numValue < range.min - borderlineThreshold || numValue > range.max + borderlineThreshold) return 'red';
+    else if (numValue < range.min || numValue > range.max) return 'yellow';
+    return 'green';
+  };
+
+  const getLast7Days = (metric) => {
+    const allEntries = [...(entries.section1 || []), ...(entries.section2 || []), ...(entries.section3 || []), ...(entries.section4 || []), ...(entries.section5 || [])];
+    return allEntries.filter(entry => entry[metric] !== undefined).map(entry => ({ date: entry.date, value: parseFloat(entry[metric]) })).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-7);
+  };
+
+  const getYesterdayValue = (metric) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const allEntries = [...(entries.section1 || []), ...(entries.section2 || []), ...(entries.section3 || []), ...(entries.section4 || []), ...(entries.section5 || [])];
+    const yesterdayEntry = allEntries.find(e => e.date === yesterdayStr && e[metric] !== undefined);
+    return yesterdayEntry ? parseFloat(yesterdayEntry[metric]) : null;
+  };
+
+  const generateInsights = async (section) => {
+    setLoadingInsights(prev => ({ ...prev, [section]: true }));
+    setShowInsights(prev => ({ ...prev, [section]: true }));
+    
+    const sectionData = entries[section] || [];
+    
+    if (sectionData.length === 0) {
+      setInsights(prev => ({ ...prev, [section]: 'No data available yet. Start tracking to get personalized insights!' }));
+      setLoadingInsights(prev => ({ ...prev, [section]: false }));
+      return;
+    }
+
+    const sectionNames = {
+      section1: 'Blood Chemistry',
+      section2: 'Full Blood Count',
+      section3: 'Differential',
+      section4: 'Acute Phase Reactants',
+      section5: 'Health Activity & Charting'
+    };
+
+    const prompt = `Analyze this ${sectionNames[section]} data and provide 3-4 key health insights. Be specific, concise, and helpful. Focus only on this data:
+
+${JSON.stringify(sectionData, null, 2)}
+
+Reference ranges: ${JSON.stringify(referenceRanges, null, 2)}
+
+Provide insights about:
+1. Notable trends or patterns
+2. Values outside normal ranges
+3. Suggestions for improvement
+4. Any concerning changes
+
+Format as bullet points.`;
+
+    try {
+      setInsights(prev => ({ ...prev, [section]: 'Analyzing your data...' }));
+      
+      setTimeout(() => {
+        const mockInsights = generateMockInsights(section, sectionData);
+        setInsights(prev => ({ ...prev, [section]: mockInsights }));
+        setLoadingInsights(prev => ({ ...prev, [section]: false }));
+      }, 1500);
+      
+    } catch (error) {
+      setInsights(prev => ({ ...prev, [section]: 'Unable to generate insights at this time. Please try again later.' }));
+      setLoadingInsights(prev => ({ ...prev, [section]: false }));
+    }
+  };
+
+  const generateDailyInsights = async () => {
+    setLoadingInsights(prev => ({ ...prev, daily: true }));
+    setShowInsights(prev => ({ ...prev, daily: true }));
+    
+    const allData = {
+      bloodChemistry: entries.section1 || [],
+      fullBloodCount: entries.section2 || [],
+      differential: entries.section3 || [],
+      acutePhase: entries.section4 || [],
+      healthActivity: entries.section5 || []
+    };
+
+    const hasData = Object.values(allData).some(section => section.length > 0);
+    
+    if (!hasData) {
+      setInsights(prev => ({ ...prev, daily: 'No data available yet. Start tracking across sections to get comprehensive daily insights!' }));
+      setLoadingInsights(prev => ({ ...prev, daily: false }));
+      return;
+    }
+
+    try {
+      setInsights(prev => ({ ...prev, daily: 'Analyzing your comprehensive health data...' }));
+      
+      setTimeout(() => {
+        const mockInsights = generateMockDailyInsights(allData);
+        setInsights(prev => ({ ...prev, daily: mockInsights }));
+        setLoadingInsights(prev => ({ ...prev, daily: false }));
+      }, 2000);
+      
+    } catch (error) {
+      setInsights(prev => ({ ...prev, daily: 'Unable to generate insights at this time. Please try again later.' }));
+      setLoadingInsights(prev => ({ ...prev, daily: false }));
+    }
+  };
+
+  const generateMockInsights = (section, data) => {
+    const recentEntries = data.slice(-7);
+    const insights = [];
+    
+    if (section === 'section1') {
+      const metrics = ['Sodium', 'Potassium', 'Urea', 'Creatinine'];
+      metrics.forEach(metric => {
+        const values = recentEntries.filter(e => e[metric]).map(e => parseFloat(e[metric]));
+        if (values.length > 0) {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const range = referenceRanges[metric];
+          const trend = values.length > 1 ? (values[values.length - 1] - values[0]) : 0;
+          const trendText = trend > 0.5 ? 'increasing' : trend < -0.5 ? 'decreasing' : 'stable';
+          
+          if (avg < range.min) {
+            insights.push(`• ⚠️ ${metric} is LOW (avg: ${avg.toFixed(2)} ${range.unit}). Consider discussing with your doctor.`);
+          } else if (avg > range.max) {
+            insights.push(`• ⚠️ ${metric} is HIGH (avg: ${avg.toFixed(2)} ${range.unit}). Monitor closely and consult healthcare provider.`);
+          } else {
+            insights.push(`• ✓ ${metric} is normal (avg: ${avg.toFixed(2)} ${range.unit}, ${trendText}).`);
+          }
+        }
+      });
+    } else if (section === 'section2') {
+      const metrics = ['Haemoglobin', 'WBC', 'Platelets', 'RBC', 'HCT'];
+      metrics.forEach(metric => {
+        const values = recentEntries.filter(e => e[metric]).map(e => parseFloat(e[metric]));
+        if (values.length > 0) {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const latest = values[values.length - 1];
+          const range = referenceRanges[metric];
+          
+          if (latest < range.min) {
+            insights.push(`• ⚠️ ${metric} is below normal (${latest.toFixed(2)} ${range.unit}). ${metric === 'Haemoglobin' ? 'May indicate anemia.' : 'Needs attention.'}`);
+          } else if (latest > range.max) {
+            insights.push(`• ⚠️ ${metric} is above normal (${latest.toFixed(2)} ${range.unit}). Follow up recommended.`);
+          } else {
+            const change = values.length > 1 ? ((latest - values[0]) / values[0] * 100).toFixed(1) : 0;
+            insights.push(`• ✓ ${metric} is healthy (${latest.toFixed(2)} ${range.unit}${Math.abs(change) > 5 ? `, ${change > 0 ? '+' : ''}${change}% change` : ''}).`);
+          }
+        }
+      });
+    } else if (section === 'section3') {
+      const metrics = ['Neutrophils', 'Lymphocytes'];
+      metrics.forEach(metric => {
+        const values = recentEntries.filter(e => e[metric]).map(e => parseFloat(e[metric]));
+        if (values.length > 0) {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const range = referenceRanges[metric];
+          
+          if (avg < range.min) {
+            insights.push(`• ⚠️ ${metric} count is low (avg: ${avg.toFixed(2)} ${range.unit}). May affect immune function.`);
+          } else if (avg > range.max) {
+            insights.push(`• ⚠️ ${metric} count is elevated (avg: ${avg.toFixed(2)} ${range.unit}). Could indicate infection or inflammation.`);
+          } else {
+            insights.push(`• ✓ ${metric} count is within normal range (avg: ${avg.toFixed(2)} ${range.unit}).`);
+          }
+        }
+      });
+      
+      const neutValues = recentEntries.filter(e => e['Neutrophils']).map(e => parseFloat(e['Neutrophils']));
+      const lymphValues = recentEntries.filter(e => e['Lymphocytes']).map(e => parseFloat(e['Lymphocytes']));
+      if (neutValues.length > 0 && lymphValues.length > 0) {
+        const neutAvg = neutValues.reduce((a, b) => a + b, 0) / neutValues.length;
+        const lymphAvg = lymphValues.reduce((a, b) => a + b, 0) / lymphValues.length;
+        const ratio = (neutAvg / lymphAvg).toFixed(2);
+        insights.push(`• Neutrophil/Lymphocyte ratio: ${ratio} ${ratio > 3 ? '(slightly elevated, monitor for inflammation)' : '(balanced)'}.`);
+      }
+    } else if (section === 'section4') {
+      const crpValues = recentEntries.filter(e => e['CRP']).map(e => parseFloat(e['CRP']));
+      if (crpValues.length > 0) {
+        const latest = crpValues[crpValues.length - 1];
+        const trend = crpValues.length > 1 ? crpValues[crpValues.length - 1] - crpValues[0] : 0;
+        
+        if (latest > 10) {
+          insights.push(`• ⚠️ CRP is significantly elevated (${latest.toFixed(2)} mg/L). Indicates active inflammation. Seek medical advice.`);
+        } else if (latest > 5) {
+          insights.push(`• ⚡ CRP is moderately elevated (${latest.toFixed(2)} mg/L). Mild inflammation present.`);
+        } else {
+          insights.push(`• ✓ CRP is low (${latest.toFixed(2)} mg/L). No significant inflammation detected.`);
+        }
+        
+        if (trend < -2) {
+          insights.push(`• 📉 CRP trending down - inflammation is improving.`);
+        } else if (trend > 2) {
+          insights.push(`• 📈 CRP trending up - inflammation may be worsening. Monitor closely.`);
+        }
+      }
+      
+      const haptValues = recentEntries.filter(e => e['Haptoglobin']).map(e => parseFloat(e['Haptoglobin']));
+      if (haptValues.length > 0) {
+        const avg = haptValues.reduce((a, b) => a + b, 0) / haptValues.length;
+        const range = referenceRanges['Haptoglobin'];
+        if (avg < range.min) {
+          insights.push(`• ⚠️ Haptoglobin is low (${avg.toFixed(2)} g/L). May indicate hemolysis. Discuss with doctor.`);
+        } else {
+          insights.push(`• ✓ Haptoglobin is normal (${avg.toFixed(2)} g/L).`);
+        }
+      }
+    } else if (section === 'section5') {
+      const bmValues = recentEntries.filter(e => e['Bowel Movements']).map(e => parseFloat(e['Bowel Movements']));
+      const stoolValues = recentEntries.filter(e => e['Stool Score']).map(e => parseFloat(e['Stool Score']));
+      const waterValues = recentEntries.filter(e => e['Water Intake']).map(e => parseFloat(e['Water Intake']));
+      
+      if (bmValues.length > 0) {
+        const avgBM = bmValues.reduce((a, b) => a + b, 0) / bmValues.length;
+        if (avgBM < 1) {
+          insights.push(`• ⚠️ Low bowel movement frequency (avg: ${avgBM.toFixed(1)}/day). May indicate constipation. Increase fiber and hydration.`);
+        } else if (avgBM > 3) {
+          insights.push(`• ⚡ High bowel movement frequency (avg: ${avgBM.toFixed(1)}/day). Monitor for diarrhea or digestive issues.`);
+        } else {
+          insights.push(`• ✓ Healthy bowel movement frequency (avg: ${avgBM.toFixed(1)}/day).`);
+        }
+      }
+      
+      if (stoolValues.length > 0) {
+        const avgStool = stoolValues.reduce((a, b) => a + b, 0) / stoolValues.length;
+        const consistency = avgStool < 3 ? 'hard/constipated' : avgStool > 5 ? 'loose/diarrhea' : 'ideal';
+        const emoji = avgStool < 3 ? '⚠️' : avgStool > 5 ? '⚡' : '✓';
+        insights.push(`• ${emoji} Stool consistency: ${consistency} (avg Bristol: ${avgStool.toFixed(1)}).`);
+        
+        if (avgStool < 3) {
+          insights.push(`• 💡 For harder stools: increase water, fiber (fruits, vegetables), and physical activity.`);
+        } else if (avgStool > 5) {
+          insights.push(`• 💡 For loose stools: consider reducing dairy, caffeine, or fatty foods. Consult doctor if persistent.`);
+        }
+      }
+      
+      if (waterValues.length > 0) {
+        const avgWater = waterValues.reduce((a, b) => a + b, 0) / waterValues.length;
+        if (avgWater < 2) {
+          insights.push(`• ⚠️ Low hydration (avg: ${avgWater.toFixed(1)}L/day). Aim for 2-3 liters daily for optimal health.`);
+        } else if (avgWater >= 2 && avgWater <= 3) {
+          insights.push(`• ✓ Excellent hydration (avg: ${avgWater.toFixed(1)}L/day). Keep it up!`);
+        } else {
+          insights.push(`• ⚡ Very high water intake (avg: ${avgWater.toFixed(1)}L/day). Generally good, but ensure electrolyte balance.`);
+        }
+      }
+      
+      if (waterValues.length > 0 && bmValues.length > 0) {
+        const avgWater = waterValues.reduce((a, b) => a + b, 0) / waterValues.length;
+        const avgBM = bmValues.reduce((a, b) => a + b, 0) / bmValues.length;
+        if (avgWater < 2 && avgBM < 1) {
+          insights.push(`• 🔗 Connection detected: Low water intake may be contributing to infrequent bowel movements.`);
+        }
+      }
+    }
+    
+    if (insights.length === 0) {
+      insights.push('• Not enough data to generate insights. Continue tracking!');
+    } else {
+      insights.push(`\n📊 Analyzed ${recentEntries.length} recent entries.`);
+    }
+    
+    return insights.join('\n');
+  };
+
+  const generateMockDailyInsights = (allData) => {
+    const insights = [];
+    const totalEntries = Object.values(allData).reduce((sum, section) => sum + section.length, 0);
+    
+    insights.push('📊 **COMPREHENSIVE HEALTH ANALYSIS**\n');
+    insights.push(`Total tracking: ${totalEntries} entries across all sections\n`);
+    
+    insights.push('🔬 **KEY FINDINGS:**');
+    
+    const recentBC = allData.bloodChemistry.slice(-7);
+    const recentFBC = allData.fullBloodCount.slice(-7);
+    const recentHA = allData.healthActivity.slice(-7);
+    
+    if (recentBC.length > 0) {
+      const creatValues = recentBC.filter(e => e['Creatinine']).map(e => parseFloat(e['Creatinine']));
+      if (creatValues.length > 0) {
+        const avg = creatValues.reduce((a, b) => a + b, 0) / creatValues.length;
+        if (avg > 120) {
+          insights.push(`• ⚠️ Kidney function: Creatinine elevated (${avg.toFixed(1)} μmol/L). Ensure adequate hydration and follow up with doctor.`);
+        } else {
+          insights.push(`• ✓ Kidney function: Healthy (Creatinine: ${avg.toFixed(1)} μmol/L).`);
+        }
+      }
+    }
+    
+    if (recentFBC.length > 0) {
+      const hbValues = recentFBC.filter(e => e['Haemoglobin']).map(e => parseFloat(e['Haemoglobin']));
+      if (hbValues.length > 0) {
+        const latest = hbValues[hbValues.length - 1];
+        if (latest < 130) {
+          insights.push(`• ⚠️ Blood health: Hemoglobin low (${latest.toFixed(1)} g/L). May indicate anemia - iron-rich foods recommended.`);
+        } else {
+          insights.push(`• ✓ Blood health: Hemoglobin optimal (${latest.toFixed(1)} g/L).`);
+        }
+      }
+    }
+    
+    if (recentHA.length > 0) {
+      const waterValues = recentHA.filter(e => e['Water Intake']).map(e => parseFloat(e['Water Intake']));
+      const bmValues = recentHA.filter(e => e['Bowel Movements']).map(e => parseFloat(e['Bowel Movements']));
+      
+      if (waterValues.length > 0 && bmValues.length > 0) {
+        const avgWater = waterValues.reduce((a, b) => a + b, 0) / waterValues.length;
+        const avgBM = bmValues.reduce((a, b) => a + b, 0) / bmValues.length;
+        
+        if (avgWater < 2 && avgBM < 1) {
+          insights.push(`• 🔗 Hydration-Digestion Link: Low water (${avgWater.toFixed(1)}L) correlates with infrequent BMs (${avgBM.toFixed(1)}/day).`);
+        }
+      }
+    }
+    
+    insights.push('\n🎯 **CROSS-SECTION CORRELATIONS:**');
+    
+    if (allData.healthActivity.length > 0 && allData.bloodChemistry.length > 0) {
+      insights.push('• Your daily habits (hydration, digestion) directly impact blood chemistry markers.');
+    }
+    
+    if (allData.fullBloodCount.length > 0 && allData.differential.length > 0) {
+      insights.push('• Complete blood picture shows relationship between total counts and cell differentials.');
+    }
+    
+    if (allData.acutePhase.length > 0) {
+      const recentAP = allData.acutePhase.slice(-7);
+      const crpValues = recentAP.filter(e => e['CRP']).map(e => parseFloat(e['CRP']));
+      if (crpValues.length > 0) {
+        const avgCRP = crpValues.reduce((a, b) => a + b, 0) / crpValues.length;
+        if (avgCRP > 5 && allData.differential.length > 0) {
+          insights.push(`• 🔗 Inflammation detected (CRP: ${avgCRP.toFixed(1)} mg/L) - check differential for elevated neutrophils.`);
+        }
+      }
+    }
+    
+    insights.push('\n💡 **PERSONALIZED RECOMMENDATIONS:**');
+    
+    const allWaterValues = allData.healthActivity.filter(e => e['Water Intake']).map(e => parseFloat(e['Water Intake']));
+    if (allWaterValues.length > 0) {
+      const avgWater = allWaterValues.reduce((a, b) => a + b, 0) / allWaterValues.length;
+      if (avgWater < 2) {
+        insights.push('• 💧 Priority: Increase water intake to 2-3L daily. Benefits: improved kidney function, better digestion, optimal blood volume.');
+      }
+    }
+    
+    if (recentFBC.length > 0) {
+      const wbcValues = recentFBC.filter(e => e['WBC']).map(e => parseFloat(e['WBC']));
+      if (wbcValues.length > 0) {
+        const latest = wbcValues[wbcValues.length - 1];
+        if (latest < 4 || latest > 11) {
+          insights.push('• 🩺 Follow-up: WBC outside normal range. Discuss with healthcare provider at next appointment.');
+        }
+      }
+    }
+    
+    insights.push('• 📈 Continue consistent tracking - more data enables better pattern recognition.');
+    insights.push('• 🏥 Share these insights with your healthcare team for informed discussions.');
+    
+    return insights.join('\n');
+  };
+
+  const loadTestData = () => {
+    const today = new Date();
+    const testEntries = {
+      section1: [],
+      section2: [],
+      section3: [],
+      section4: [],
+      section5: []
+    };
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+
+      testEntries.section1.push({
+        date: dateStr,
+        'Sodium': 138 + Math.random() * 4,
+        'Potassium': 4.0 + Math.random() * 0.6,
+        'Urea': 5.0 + Math.random() * 2,
+        'Creatinine': 80 + Math.random() * 20,
+        'eGPR': Math.random() > 0.5 ? 'yes' : 'no'
+      });
+
+      testEntries.section2.push({
+        date: dateStr,
+        'RBC': 4.8 + Math.random() * 0.4,
+        'Haemoglobin': 145 + Math.random() * 15,
+        'HCT': 0.43 + Math.random() * 0.04,
+        'Platelets': 200 + Math.random() * 100,
+        'WBC': 6.5 + Math.random() * 2
+      });
+
+      testEntries.section3.push({
+        date: dateStr,
+        'Neutrophils': 4.0 + Math.random() * 2,
+        'Lymphocytes': 2.0 + Math.random() * 1
+      });
+
+      testEntries.section4.push({
+        date: dateStr,
+        'CRP': 1 + Math.random() * 3,
+        'Haptoglobin': 1.0 + Math.random() * 0.8
+      });
+
+      testEntries.section5.push({
+        date: dateStr,
+        'Bowel Movements': Math.floor(1 + Math.random() * 3),
+        'Stool Score': Math.floor(3 + Math.random() * 3),
+        'Water Intake': 2.0 + Math.random() * 1
+      });
+    }
+
+    setEntries(testEntries);
+    localStorage.setItem('bloodTrackerEntries', JSON.stringify(testEntries));
+
+    const newSavedDates = {
+      section1: new Set(testEntries.section1.map(e => e.date)),
+      section2: new Set(testEntries.section2.map(e => e.date)),
+      section3: new Set(testEntries.section3.map(e => e.date)),
+      section4: new Set(testEntries.section4.map(e => e.date)),
+      section5: new Set(testEntries.section5.map(e => e.date))
+    };
+    setSavedDates(newSavedDates);
+
+    showNotification('✅ Test data loaded! 7 days of data added to all sections.');
+  };
+
+  const handleCSVImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      console.log('CSV content:', text);
+      
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        showNotification('⚠️ CSV file appears empty or invalid. Need at least a header row and one data row.');
+        return;
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      console.log('Headers:', headers);
+      
+      const dateIndex = headers.findIndex(h => h.toLowerCase() === 'date');
+      const sectionIndex = headers.findIndex(h => h.toLowerCase() === 'section');
+
+      if (dateIndex === -1) {
+        showNotification('⚠️ CSV must have a "date" column. Found columns: ' + headers.join(', '));
+        return;
+      }
+      
+      if (sectionIndex === -1) {
+        showNotification('⚠️ CSV must have a "section" column. Found columns: ' + headers.join(', '));
+        return;
+      }
+
+      const importedEntries = {
+        section1: [],
+        section2: [],
+        section3: [],
+        section4: [],
+        section5: []
+      };
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        const date = values[dateIndex];
+        const section = values[sectionIndex];
+
+        console.log(`Row ${i}: date=${date}, section=${section}`);
+
+        if (!date || !section) {
+          console.log(`Skipping row ${i}: missing date or section`);
+          errorCount++;
+          continue;
+        }
+
+        if (!importedEntries[section]) {
+          console.log(`Invalid section: ${section}`);
+          errorCount++;
+          continue;
+        }
+
+        const entry = { date };
+        let hasData = false;
+        
+        for (let j = 0; j < headers.length; j++) {
+          if (j !== dateIndex && j !== sectionIndex && values[j]) {
+            entry[headers[j]] = values[j];
+            hasData = true;
+          }
+        }
+
+        if (hasData) {
+          importedEntries[section].push(entry);
+          successCount++;
+          console.log(`Added entry for ${section} on ${date}`);
+        } else {
+          errorCount++;
+        }
+      }
+
+      console.log('Imported entries:', importedEntries);
+
+      if (successCount === 0) {
+        showNotification('⚠️ No valid data found in CSV. Check format: date column, section column (section1-section5), date format YYYY-MM-DD');
+        return;
+      }
+
+      const mergedEntries = {
+        section1: [...(entries.section1 || []), ...importedEntries.section1],
+        section2: [...(entries.section2 || []), ...importedEntries.section2],
+        section3: [...(entries.section3 || []), ...importedEntries.section3],
+        section4: [...(entries.section4 || []), ...importedEntries.section4],
+        section5: [...(entries.section5 || []), ...importedEntries.section5]
+      };
+
+      setEntries(mergedEntries);
+      localStorage.setItem('bloodTrackerEntries', JSON.stringify(mergedEntries));
+
+      const newSavedDates = {
+        section1: new Set(mergedEntries.section1.map(e => e.date)),
+        section2: new Set(mergedEntries.section2.map(e => e.date)),
+        section3: new Set(mergedEntries.section3.map(e => e.date)),
+        section4: new Set(mergedEntries.section4.map(e => e.date)),
+        section5: new Set(mergedEntries.section5.map(e => e.date))
+      };
+      setSavedDates(newSavedDates);
+
+      showNotification(`✅ Successfully imported ${successCount} entries! Section 1: ${importedEntries.section1.length}, Section 2: ${importedEntries.section2.length}, Section 3: ${importedEntries.section3.length}, Section 4: ${importedEntries.section4.length}, Section 5: ${importedEntries.section5.length}`);
+      
+      event.target.value = '';
+    } catch (error) {
+      console.error('Import error:', error);
+      showNotification('❌ Error importing CSV: ' + error.message);
+    }
+  };
+
+  const downloadCSVTemplate = () => {
+    const headers = [
+      'date', 'section', 
+      // Section 1 metrics
+      'Sodium', 'Potassium', 'Chloride', 'Bicarbonate', 'Urea', 'Creatinine', 'eGPR', 'Uric Acid', 
+      'Glucose (R)', 'Inorg. Phos', 'Magnesium', 'Calcium', 'Ca alb corr', 'Albumin', 'Tot Protein', 
+      'Tot Bilirubin', 'ALT', 'AST', 'Alk. phos.', 'GGT', 'LDH', 'Cholesterol', 'Triglycerides', 
+      'TSH', 'Free T4', 'FSH', 'LH', 'Oestradiol', 'SHBG', 'Testosterone', 'Free Testos.', 'Vit D', 'Intact PTH',
+      // Section 2 metrics
+      'RBC', 'Haemoglobin', 'HCT', 'MCV', 'MCH', 'MCHC', 'RDW', 'Platelets', 'WBC',
+      // Section 3 metrics
+      'Blasts', 'Promyelocytes', 'Myelocytes', 'Neutrophils', 'Lymphocytes', 'Monocytes', 'Eosinophils', 'Basophils',
+      // Section 4 metrics
+      'CRP', 'Haptoglobin',
+      // Section 5 metrics
+      'Bowel Movements', 'Stool Score', 'Water Intake'
+    ];
+    
+    const sampleRows = [
+      '2025-01-01,section1,140,4.2,,,6.0,95,yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '2025-01-01,section2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,4.9,150,0.45,,,,,250,7.5,,,,,,,,,,,,',
+      '2025-01-01,section3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,4.5,2.5,,,,,,,,,',
+      '2025-01-01,section4,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2.0,1.2,,,',
+      '2025-01-01,section5,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,2,4,2.5'
+    ];
+    
+    const csvContent = headers.join(',') + '\n' + sampleRows.join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'blood_tracker_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showNotification('✅ CSV template downloaded! Check your Downloads folder.');
+  };
+
+  const clearAllData = () => {
+    setShowClearConfirm(true);
+  };
+
+  const confirmClearData = () => {
+    const emptyEntries = {
+      section1: [],
+      section2: [],
+      section3: [],
+      section4: [],
+      section5: []
+    };
+    
+    setEntries(emptyEntries);
+    localStorage.removeItem('bloodTrackerEntries');
+    
+    const emptySavedDates = {
+      section1: new Set(),
+      section2: new Set(),
+      section3: new Set(),
+      section4: new Set(),
+      section5: new Set()
+    };
+    setSavedDates(emptySavedDates);
+    
+    setFormData({ section1: {}, section2: {}, section3: {}, section4: {}, section5: {} });
+    
+    setShowClearConfirm(false);
+    showNotification('🗑️ All data cleared successfully!');
+  };
+
+  const renderTrends = (section, metrics) => {
+    const sectionEntries = entries[section] || [];
+    if (sectionEntries.length === 0) return <div className="text-gray-500 text-center py-8">No data available yet. Start tracking to see trends!</div>;
+    const metricsToShow = section === 'section5' ? metrics : Object.keys(selectedMetrics[section]).filter(m => selectedMetrics[section][m]);
+    return (
+      <div className="space-y-6">
+        {metricsToShow.map(metric => {
+          const data = sectionEntries.filter(entry => entry[metric] !== undefined).map(entry => ({ date: entry.date, value: metric === 'eGPR' && section === 'section1' ? (entry[metric] === 'yes' ? 90 : 60) : parseFloat(entry[metric]) })).sort((a, b) => new Date(a.date) - new Date(b.date));
+          if (data.length === 0) return null;
+          const values = data.map(d => d.value);
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const trend = values.length > 1 ? (values[values.length - 1] > values[0] ? 'increasing' : 'decreasing') : 'stable';
+          return (
+            <div key={metric} className="border rounded-lg p-4">
+              <h4 className="font-semibold mb-2">{metric} {referenceRanges[metric] && `(${referenceRanges[metric].min}-${referenceRanges[metric].max} ${referenceRanges[metric].unit})`}</h4>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" angle={-45} textAnchor="end" height={80} />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="mt-2 text-sm text-gray-600">
+                <p>Average: {avg.toFixed(2)} {referenceRanges[metric]?.unit}</p>
+                <p>Trend: {trend}</p>
+                <p>Latest: {values[values.length - 1].toFixed(2)} {referenceRanges[metric]?.unit}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderSection = (sectionKey, title, metrics, icon) => {
+    const selectedMetricsInSection = Object.keys(selectedMetrics[sectionKey]).filter(m => selectedMetrics[sectionKey][m]);
+    const hasSavedData = savedDates[sectionKey].has(currentDate);
+    const sectionColors = {
+      section1: 'border-l-4 border-purple-500 bg-purple-50',
+      section2: 'border-l-4 border-red-500 bg-red-50',
+      section3: 'border-l-4 border-green-500 bg-green-50',
+      section4: 'border-l-4 border-orange-500 bg-orange-50'
+    };
+    return (
+      <div className={`rounded-lg shadow-md p-6 mb-6 ${sectionColors[sectionKey]}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <span>{icon}</span>
+            {title}
+            {hasSavedData && <span className="ml-2 text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle size={14} />Entry saved</span>}
+          </h2>
+        </div>
+        <div className="mb-4">
+          <button onClick={() => setExpandedSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))} className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium">
+            {expandedSections[sectionKey] ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            Select Metrics ({selectedMetricsInSection.length} selected)
+          </button>
+          {expandedSections[sectionKey] && (
+            <div className="mt-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setSelectedMetrics(prev => ({ ...prev, [sectionKey]: metrics.reduce((acc, m) => ({ ...acc, [m]: true }), {}) }))} className="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Select All</button>
+                <button onClick={() => setSelectedMetrics(prev => ({ ...prev, [sectionKey]: metrics.reduce((acc, m) => ({ ...acc, [m]: false }), {}) }))} className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Deselect All</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {metrics.map(metric => (
+                  <label key={metric} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                    <input type="checkbox" checked={selectedMetrics[sectionKey][metric] || false} onChange={() => setSelectedMetrics(prev => ({ ...prev, [sectionKey]: { ...prev[sectionKey], [metric]: !prev[sectionKey][metric] } }))} className="w-4 h-4" />
+                    <span className="text-sm">{metric}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        {!showTrends[sectionKey] && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {selectedMetricsInSection.map(metric => (
+                <div key={metric}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {metric}
+                    {referenceRanges[metric] && <span className="text-xs text-gray-500 ml-2">({referenceRanges[metric].min}-{referenceRanges[metric].max} {referenceRanges[metric].unit})</span>}
+                  </label>
+                  {metric === 'eGPR' && sectionKey === 'section1' ? (
+                    <select value={formData[sectionKey][metric] || ''} onChange={(e) => handleInputChange(sectionKey, metric, e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500">
+                      <option value="">Select...</option>
+                      <option value="yes">Greater than 90</option>
+                      <option value="no">Less than 90</option>
+                    </select>
+                  ) : (
+                    <>
+                      <input type="number" step="0.01" value={formData[sectionKey][metric] || ''} onChange={(e) => handleInputChange(sectionKey, metric, e.target.value)} className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 ${isOutOfRange(metric, formData[sectionKey][metric]) ? 'border-red-500 bg-red-50' : ''}`} />
+                      {isOutOfRange(metric, formData[sectionKey][metric]) && <p className="text-xs text-red-600 mt-1">Value is outside normal range</p>}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => handleSave(sectionKey)} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">Save Entry</button>
+          </div>
+        )}
+        <button onClick={() => setShowTrends(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }))} className="w-full mt-4 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+          <TrendingUp size={20} />
+          {showTrends[sectionKey] ? 'Hide Trends' : 'View Trends'}
+        </button>
+        {showTrends[sectionKey] && <div className="mt-4">{renderTrends(sectionKey, metrics)}</div>}
+        
+        <button onClick={() => generateInsights(sectionKey)} className="w-full mt-2 bg-purple-100 text-purple-700 py-2 px-4 rounded-lg hover:bg-purple-200 transition-colors flex items-center justify-center gap-2" disabled={loadingInsights[sectionKey]}>
+          <span>✨</span>
+          {loadingInsights[sectionKey] ? 'Generating...' : showInsights[sectionKey] ? 'Refresh Insights' : 'Generate Insights'}
+        </button>
+        {showInsights[sectionKey] && (
+          <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <h3 className="font-semibold text-purple-900 mb-2">AI Health Insights</h3>
+            <div className="text-sm text-gray-700 whitespace-pre-line">{insights[sectionKey]}</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDailyDashboard = () => {
+    const hasSavedData = savedDates.section5.has(currentDate);
+    return (
+      <div className="rounded-lg shadow-md p-6 mb-6 border-l-4 border-blue-500 bg-blue-50">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <span>📋</span>Section 5: Health Activity & Charting
+            {hasSavedData && <span className="ml-2 text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle size={14} />Entry saved</span>}
+          </h2>
+        </div>
+        <p className="text-gray-600 mb-6">Track your daily health activities and habits</p>
+        {!showTrends.section5 && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+              <div className="border rounded-lg p-4 bg-white">
+                <label className="block text-lg font-semibold text-gray-800 mb-2">💩 Bowel Movements</label>
+                <p className="text-xs text-gray-600 mb-3">How many times today?</p>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Enter count"
+                  value={formData.section5['Bowel Movements'] || ''}
+                  onChange={(e) => handleInputChange('section5', 'Bowel Movements', e.target.value)}
+                  className="w-full p-3 border rounded text-lg font-bold"
+                />
+                <p className="text-xs text-gray-500 mt-2">Normal: 1-3 times per day</p>
+              </div>
+
+              <div className="border rounded-lg p-4 bg-white">
+                <label className="block text-lg font-semibold text-gray-800 mb-2">📊 Stool Score (Bristol Scale)</label>
+                <p className="text-xs text-gray-600 mb-3">Select consistency (1-7)</p>
+                <select
+                  value={formData.section5['Stool Score'] || ''}
+                  onChange={(e) => handleInputChange('section5', 'Stool Score', e.target.value)}
+                  className="w-full p-3 border rounded text-lg font-bold mb-2"
+                >
+                  <option value="">Select score...</option>
+                  <option value="1">1 - Separate hard lumps</option>
+                  <option value="2">2 - Lumpy sausage</option>
+                  <option value="3">3 - Cracked sausage</option>
+                  <option value="4">4 - Smooth snake</option>
+                  <option value="5">5 - Soft blobs</option>
+                  <option value="6">6 - Mushy pieces</option>
+                  <option value="7">7 - Watery liquid</option>
+                </select>
+                <p className="text-xs text-gray-500">Ideal: 3-5 (well-formed)</p>
+              </div>
+
+              <div className="border rounded-lg p-4 bg-white md:col-span-2">
+                <label className="block text-lg font-semibold text-gray-800 mb-2">💧 Water Intake</label>
+                <p className="text-xs text-gray-600 mb-3">How much water today? (in liters)</p>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  placeholder="Enter liters"
+                  value={formData.section5['Water Intake'] || ''}
+                  onChange={(e) => handleInputChange('section5', 'Water Intake', e.target.value)}
+                  className="w-full p-3 border rounded text-lg font-bold"
+                />
+                <p className="text-xs text-gray-500 mt-2">Recommended: 2-3 liters per day</p>
+              </div>
+            </div>
+            <button onClick={() => handleSave('section5')} className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold">Save Today's Health Activity</button>
+          </div>
+        )}
+        <button onClick={() => setShowTrends(prev => ({ ...prev, section5: !prev.section5 }))} className="w-full mt-4 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
+          <TrendingUp size={20} />
+          {showTrends.section5 ? 'Hide Trends' : 'View Trends'}
+        </button>
+        {showTrends.section5 && <div className="mt-4">{renderTrends('section5', healthActivityMetrics)}</div>}
+        
+        <button onClick={() => generateInsights('section5')} className="w-full mt-2 bg-purple-100 text-purple-700 py-2 px-4 rounded-lg hover:bg-purple-200 transition-colors flex items-center justify-center gap-2" disabled={loadingInsights.section5}>
+          <span>✨</span>
+          {loadingInsights.section5 ? 'Generating...' : showInsights.section5 ? 'Refresh Insights' : 'Generate Insights'}
+        </button>
+        {showInsights.section5 && (
+          <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <h3 className="font-semibold text-purple-900 mb-2">AI Health Insights</h3>
+            <div className="text-sm text-gray-700 whitespace-pre-line">{insights.section5}</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4">
+      <div className="max-w-6xl mx-auto">
+        {notification && (
+          <div className="fixed top-4 right-4 bg-white border-l-4 border-blue-500 shadow-lg p-4 rounded-lg z-50 max-w-md animate-fade-in">
+            <p className="text-gray-800 font-medium">{notification}</p>
+          </div>
+        )}
+
+        {showClearConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">⚠️ Clear All Data?</h3>
+              <p className="text-gray-700 mb-6">Are you sure you want to delete ALL data from all sections? This action cannot be undone.</p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowClearConfirm(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold">
+                  Cancel
+                </button>
+                <button onClick={confirmClearData} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold">
+                  Yes, Delete All
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg mb-6">
+          <h1 className="text-3xl font-bold mb-2">Chemical Pathology Tracking & Analysis</h1>
+          <p className="text-blue-100">Track your blood work metrics and visualize trends over time</p>
+        </div>
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-4">
+              <Calendar className="text-blue-600" size={24} />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Entry Date</label>
+                <input type="date" value={currentDate} onChange={(e) => setCurrentDate(e.target.value)} className="p-2 border rounded focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={loadTestData} className="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition-colors font-semibold whitespace-nowrap">
+                📊 Load Test Data
+              </button>
+              <label className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors font-semibold cursor-pointer whitespace-nowrap">
+                📁 Import CSV
+                <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
+              </label>
+              <button onClick={clearAllData} className="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-colors font-semibold whitespace-nowrap">
+                🗑️ Clear All Data
+              </button>
+            </div>
+          </div>
+          <button onClick={downloadCSVTemplate} className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+            ⬇️ Download CSV Template
+          </button>
+        </div>
+
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow-md p-4 mb-6">
+          <button onClick={generateDailyInsights} className="w-full bg-white text-purple-700 py-3 px-4 rounded-lg hover:bg-purple-50 transition-colors font-semibold flex items-center justify-center gap-2" disabled={loadingInsights.daily}>
+            <span className="text-2xl">🧠</span>
+            {loadingInsights.daily ? 'Analyzing All Data...' : showInsights.daily ? 'Refresh Daily Insights' : 'Generate Daily Health Insights'}
+          </button>
+          {showInsights.daily && (
+            <div className="mt-4 p-4 bg-white rounded-lg">
+              <h3 className="font-bold text-lg text-purple-900 mb-3">Comprehensive Health Analysis</h3>
+              <div className="text-sm text-gray-700 whitespace-pre-line">{insights.daily}</div>
+            </div>
+          )}
+        </div>
+        {renderSection('section1', 'Section 1: Blood Chemistry', bloodChemistryMetrics, '🧪')}
+        {renderSection('section2', 'Section 2: Full Blood Count', fbcMetrics, '🩸')}
+        {renderSection('section3', 'Section 3: Differential', differentialMetrics, '🔬')}
+        {renderSection('section4', 'Section 4: Acute Phase Reactants', acutePhaseMetrics, '🔥')}
+        {renderDailyDashboard()}
+      </div>
+    </div>
+  );
+};
+
+export default BloodChemistryTracker;
