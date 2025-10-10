@@ -1,168 +1,452 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>🩸 Chemical Pathology Tracking and Analysis</title>
-
-  <!-- React 18 UMD -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-
-  <!-- Recharts UMD (global: Recharts) -->
-  <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js" crossorigin></script>
-
-  <!-- Babel for JSX in the browser (dev only) -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Tailwind (fine for dev; for prod, install via PostCSS/CLI) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <style>
-    html, body { height: 100%; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PathDash - Chemical Pathology Tracker</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/recharts@2.5.0/dist/Recharts.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.js"></script>
 </head>
-<body class="bg-slate-50">
-  <div id="root"></div>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Calendar, TrendingUp, ChevronDown, ChevronUp, CheckCircle } = lucide;
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = Recharts;
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
-    const {
-      LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-      ResponsiveContainer, ReferenceArea, ReferenceLine
-    } = Recharts;
+        const BloodChemistryTracker = () => {
+          // Metric definitions
+          const bloodChemistryMetrics = ['Sodium', 'Potassium', 'Chloride', 'Bicarbonate', 'Urea', 'Creatinine', 'eGPR', 'Uric Acid', 'Glucose (R)', 'Inorg. Phos', 'Magnesium', 'Calcium', 'Ca alb corr', 'Albumin', 'Tot Protein', 'Tot Bilirubin', 'ALT', 'AST', 'Alk. phos.', 'GGT', 'LDH', 'Cholesterol', 'Triglycerides', 'TSH', 'Free T4', 'FSH', 'LH', 'Oestradiol', 'SHBG', 'Testosterone', 'Free Testos.', 'Vit D', 'Intact PTH'];
+          const fbcMetrics = ['RBC', 'Haemoglobin', 'HCT', 'MCV', 'MCH', 'MCHC', 'RDW', 'Platelets', 'WBC'];
+          const differentialMetrics = ['Blasts', 'Promyelocytes', 'Myelocytes', 'Neutrophils', 'Lymphocytes', 'Monocytes', 'Eosinophils', 'Basophils'];
 
-    function Badge({ children }) {
-      return <span className="px-2 py-1 text-xs rounded-full bg-slate-200">{children}</span>;
-    }
+          // Reference ranges
+          const referenceRanges = {
+            'Sodium': { min: 135, max: 145, unit: 'mmol/L' },
+            'Potassium': { min: 3.5, max: 5.0, unit: 'mmol/L' },
+            'Chloride': { min: 98, max: 106, unit: 'mmol/L' },
+            'Bicarbonate': { min: 22, max: 28, unit: 'mmol/L' },
+            'Urea': { min: 2.5, max: 7.5, unit: 'mmol/L' },
+            'Creatinine': { min: 60, max: 120, unit: 'μmol/L' },
+            'eGPR': { min: 60, max: 150, unit: 'mL/min/1.73m²' },
+            'Uric Acid': { min: 200, max: 430, unit: 'μmol/L' },
+            'Glucose (R)': { min: 3.9, max: 5.5, unit: 'mmol/L' },
+            'Inorg. Phos': { min: 0.8, max: 1.5, unit: 'mmol/L' },
+            'Magnesium': { min: 0.7, max: 1.0, unit: 'mmol/L' },
+            'Calcium': { min: 2.2, max: 2.6, unit: 'mmol/L' },
+            'Ca alb corr': { min: 2.2, max: 2.6, unit: 'mmol/L' },
+            'Albumin': { min: 35, max: 50, unit: 'g/L' },
+            'Tot Protein': { min: 60, max: 80, unit: 'g/L' },
+            'Tot Bilirubin': { min: 0, max: 20, unit: 'μmol/L' },
+            'ALT': { min: 0, max: 40, unit: 'U/L' },
+            'AST': { min: 0, max: 40, unit: 'U/L' },
+            'Alk. phos.': { min: 30, max: 120, unit: 'U/L' },
+            'GGT': { min: 0, max: 60, unit: 'U/L' },
+            'LDH': { min: 120, max: 250, unit: 'U/L' },
+            'Cholesterol': { min: 0, max: 5.0, unit: 'mmol/L' },
+            'Triglycerides': { min: 0, max: 1.7, unit: 'mmol/L' },
+            'TSH': { min: 0.5, max: 4.0, unit: 'mU/L' },
+            'Free T4': { min: 10, max: 25, unit: 'pmol/L' },
+            'FSH': { min: 1, max: 30, unit: 'IU/L' },
+            'LH': { min: 1, max: 20, unit: 'IU/L' },
+            'Oestradiol': { min: 50, max: 400, unit: 'pmol/L' },
+            'SHBG': { min: 15, max: 50, unit: 'nmol/L' },
+            'Testosterone': { min: 8, max: 30, unit: 'nmol/L' },
+            'Free Testos.': { min: 200, max: 800, unit: 'pmol/L' },
+            'Vit D': { min: 50, max: 150, unit: 'nmol/L' },
+            'Intact PTH': { min: 1.0, max: 6.0, unit: 'pmol/L' },
+            'RBC': { min: 4.5, max: 5.5, unit: '×10¹²/L' },
+            'Haemoglobin': { min: 130, max: 170, unit: 'g/L' },
+            'HCT': { min: 0.40, max: 0.50, unit: 'L/L' },
+            'MCV': { min: 80, max: 100, unit: 'fL' },
+            'MCH': { min: 27, max: 32, unit: 'pg' },
+            'MCHC': { min: 320, max: 360, unit: 'g/L' },
+            'RDW': { min: 11.5, max: 14.5, unit: '%' },
+            'Platelets': { min: 150, max: 400, unit: '×10⁹/L' },
+            'WBC': { min: 4.0, max: 11.0, unit: '×10⁹/L' },
+            'Blasts': { min: 0, max: 0, unit: '×10⁹/L' },
+            'Promyelocytes': { min: 0, max: 0, unit: '×10⁹/L' },
+            'Myelocytes': { min: 0, max: 0, unit: '×10⁹/L' },
+            'Neutrophils': { min: 2.0, max: 7.5, unit: '×10⁹/L' },
+            'Lymphocytes': { min: 1.0, max: 4.0, unit: '×10⁹/L' },
+            'Monocytes': { min: 0.2, max: 1.0, unit: '×10⁹/L' },
+            'Eosinophils': { min: 0.04, max: 0.4, unit: '×10⁹/L' },
+            'Basophils': { min: 0.01, max: 0.1, unit: '×10⁹/L' }
+          };
 
-    const referenceRanges = {
-      'Sodium': { min: 135, max: 145, unit: 'mmol/L' },
-      'Potassium': { min: 3.5, max: 5.0, unit: 'mmol/L' },
-      // ... add the rest of your ranges here ...
-    };
+          // State management
+          const [selectedBloodMetrics, setSelectedBloodMetrics] = useState(
+            bloodChemistryMetrics.reduce((acc, m) => ({ ...acc, [m]: ['Sodium', 'Potassium', 'Urea', 'Creatinine', 'eGPR'].includes(m) }), {})
+          );
+          const [selectedFbcMetrics, setSelectedFbcMetrics] = useState(
+            fbcMetrics.reduce((acc, m) => ({ ...acc, [m]: ['RBC', 'Haemoglobin', 'HCT', 'Platelets', 'WBC'].includes(m) }), {})
+          );
+          const [selectedDiffMetrics, setSelectedDiffMetrics] = useState(
+            differentialMetrics.reduce((acc, m) => ({ ...acc, [m]: ['Neutrophils', 'Lymphocytes'].includes(m) }), {})
+          );
 
-    const bloodChemistryMetrics = ['Sodium','Potassium']; // trim for demo; add all your metrics
-    const healthActivityMetrics = ['Bowel Movements','Stool Score','Water Intake'];
+          const [currentBloodValues, setCurrentBloodValues] = useState({});
+          const [currentFbcValues, setCurrentFbcValues] = useState({});
+          const [currentDiffValues, setCurrentDiffValues] = useState({});
 
-    function BloodChemistryTracker() {
-      const [formData, setFormData] = useState({ section1: {}, section5: {} });
-      const [entries, setEntries] = useState({ section1: [], section5: [] });
-      const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-      const [notification, setNotification] = useState('');
+          const [savedEntries, setSavedEntries] = useState([]);
+          const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+          const [showTrends, setShowTrends] = useState(false);
+          const [expandedBloodMetrics, setExpandedBloodMetrics] = useState(false);
+          const [expandedFbcMetrics, setExpandedFbcMetrics] = useState(false);
+          const [expandedDiffMetrics, setExpandedDiffMetrics] = useState(false);
 
-      useEffect(() => {
-        const saved = localStorage.getItem('bloodTrackerEntries');
-        if (saved) setEntries(JSON.parse(saved));
-      }, []);
+          // Load saved data from localStorage
+          useEffect(() => {
+            const saved = localStorage.getItem('bloodTrackerData');
+            if (saved) {
+              setSavedEntries(JSON.parse(saved));
+            }
+          }, []);
 
-      const showNotification = (msg) => {
-        setNotification(msg);
-        setTimeout(() => setNotification(''), 4000);
-      };
+          // Helper functions
+          const isOutOfRange = (metric, value) => {
+            if (!referenceRanges[metric] || value === '' || value === undefined) return false;
+            const numValue = parseFloat(value);
+            return numValue < referenceRanges[metric].min || numValue > referenceRanges[metric].max;
+          };
 
-      const handleInputChange = (section, metric, value) => {
-        setFormData(prev => ({ ...prev, [section]: { ...prev[section], [metric]: value } }));
-      };
+          const hasDataForDate = (date, section) => {
+            return savedEntries.some(entry => entry.date === date && entry.section === section);
+          };
 
-      const handleSave = (section) => {
-        const selectedMetrics = section === 'section5' ? healthActivityMetrics : bloodChemistryMetrics;
-        const hasAll = selectedMetrics.every(m => formData[section]?.[m] !== undefined && formData[section]?.[m] !== '');
-        if (!hasAll) { showNotification('⚠️ Please fill in all metrics before saving.'); return; }
+          // Save handler
+          const handleSave = (section, values, selectedMetrics) => {
+            const selectedMetricsList = Object.keys(selectedMetrics).filter(m => selectedMetrics[m]);
+            
+            if (selectedMetricsList.length === 0) {
+              alert('Please select at least one metric');
+              return;
+            }
 
-        const newEntry = { date: currentDate, ...formData[section] };
-        const updated = { ...entries, [section]: [...(entries[section] || []), newEntry] };
-        setEntries(updated);
-        localStorage.setItem('bloodTrackerEntries', JSON.stringify(updated));
-        setFormData(prev => ({ ...prev, [section]: {} }));
-        showNotification('✅ Entry saved successfully!');
-      };
+            const hasAllValues = selectedMetricsList.every(metric => 
+              values[metric] !== undefined && values[metric] !== ''
+            );
 
-      const getLast7Days = (metric) => {
-        const all = [...(entries.section1||[]), ...(entries.section5||[])];
-        return all
-          .filter(e => e[metric] !== undefined)
-          .map(e => ({ date: e.date, value: parseFloat(e[metric]) }))
-          .sort((a,b) => new Date(a.date) - new Date(b.date))
-          .slice(-7);
-      };
+            if (!hasAllValues) {
+              alert('Please fill in all selected metrics before saving');
+              return;
+            }
 
-      return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6">
-          <header className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Chemical Pathology Tracking & Analysis</h1>
-            <Badge>Prototype</Badge>
-          </header>
+            const newEntry = {
+              id: Date.now(),
+              date: currentDate,
+              section: section,
+              values: { ...values }
+            };
 
-          <section className="bg-white rounded-2xl shadow p-6">
-            <h2 className="font-semibold mb-4">Blood Chemistry</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {bloodChemistryMetrics.map(metric => (
-                <label key={metric} className="flex items-center gap-2">
-                  <span className="w-36">{metric}</span>
-                  <input
-                    type="number"
-                    className="border rounded p-2 flex-1"
-                    value={formData.section1?.[metric] ?? ''}
-                    onChange={(e) => handleInputChange('section1', metric, e.target.value)}
-                    placeholder={referenceRanges[metric]?.unit || ''}
-                  />
-                </label>
-              ))}
-            </div>
+            const updatedEntries = [...savedEntries, newEntry];
+            setSavedEntries(updatedEntries);
+            localStorage.setItem('bloodTrackerData', JSON.stringify(updatedEntries));
 
-            <div className="flex items-center gap-3 mt-4">
-              <input
-                type="date"
-                className="border rounded p-2"
-                value={currentDate}
-                onChange={(e) => setCurrentDate(e.target.value)}
-              />
-              <button onClick={() => handleSave('section1')} className="px-4 py-2 bg-black text-white rounded-lg">
-                Save Entry
-              </button>
-            </div>
-          </section>
+            // Clear the form
+            if (section === 'Blood Chemistry') setCurrentBloodValues({});
+            if (section === 'Full Blood Count') setCurrentFbcValues({});
+            if (section === 'Differential') setCurrentDiffValues({});
 
-          <section className="bg-white rounded-2xl shadow p-6">
-            <h2 className="font-semibold mb-4">Trend (last 7 entries)</h2>
-            <div className="grid gap-6">
-              {bloodChemistryMetrics.map(metric => {
-                const data = getLast7Days(metric).map(d => ({ name: d.date, value: d.value }));
-                return (
-                  <div key={metric} className="h-56">
-                    <h3 className="text-sm font-medium mb-2">{metric}</h3>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="value" dot />
-                      </LineChart>
-                    </ResponsiveContainer>
+            alert('Entry saved successfully!');
+          };
+
+          // Render trends
+          const renderTrends = (section, metrics, selectedMetrics) => {
+            const sectionEntries = savedEntries.filter(e => e.section === section);
+            
+            if (sectionEntries.length === 0) {
+              return (
+                <div className="text-center py-8 text-gray-500">
+                  <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No entries saved yet. Add some data to see trends!</p>
+                </div>
+              );
+            }
+
+            const selectedMetricsList = Object.keys(selectedMetrics).filter(m => selectedMetrics[m]);
+
+            return (
+              <div className="space-y-6">
+                {selectedMetricsList.map(metric => {
+                  const data = sectionEntries
+                    .filter(e => e.values[metric] !== undefined)
+                    .map(e => ({
+                      date: e.date,
+                      value: parseFloat(e.values[metric])
+                    }))
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                  if (data.length === 0) return null;
+
+                  const range = referenceRanges[metric];
+                  const latestValue = data[data.length - 1].value;
+                  const isAbnormal = range && (latestValue < range.min || latestValue > range.max);
+
+                  return (
+                    <div key={metric} className="bg-white rounded-lg p-4 shadow">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">{metric}</h3>
+                          <p className="text-sm text-gray-500">
+                            {range && `Reference: ${range.min} - ${range.max} ${range.unit}`}
+                          </p>
+                        </div>
+                        <div className={`text-right ${isAbnormal ? 'text-red-600' : 'text-green-600'}`}>
+                          <div className="text-2xl font-bold">{latestValue.toFixed(2)}</div>
+                          <div className="text-xs">{range?.unit}</div>
+                        </div>
+                      </div>
+                      
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={data}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                          <YAxis domain={[range?.min || 'auto', range?.max || 'auto']} />
+                          <Tooltip />
+                          <Line 
+                            type="monotone" 
+                            dataKey="value" 
+                            stroke={isAbnormal ? "#ef4444" : "#3b82f6"} 
+                            strokeWidth={2}
+                            dot={{ fill: isAbnormal ? "#ef4444" : "#3b82f6" }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          };
+
+          // Render section
+          const renderSection = (
+            title,
+            metrics,
+            selectedMetrics,
+            setSelectedMetrics,
+            currentValues,
+            setCurrentValues,
+            onSave,
+            bgColor,
+            textColor
+          ) => {
+            const selectedMetricsList = Object.keys(selectedMetrics).filter(m => selectedMetrics[m]);
+            const isExpanded = title === 'Section 1: Blood Chemistry' ? expandedBloodMetrics :
+                              title === 'Section 2: Full Blood Count' ? expandedFbcMetrics :
+                              expandedDiffMetrics;
+            const setExpanded = title === 'Section 1: Blood Chemistry' ? setExpandedBloodMetrics :
+                               title === 'Section 2: Full Blood Count' ? setExpandedFbcMetrics :
+                               setExpandedDiffMetrics;
+
+            return (
+              <div className={`${bgColor} rounded-xl p-6 mb-6`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className={`text-2xl font-semibold ${textColor}`}>{title}</h2>
+                  {hasDataForDate(currentDate, title) && (
+                    <div className="flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                      <CheckCircle className="w-4 h-4" />
+                      Data saved for this date
+                    </div>
+                  )}
+                </div>
+
+                {/* Metric Selector */}
+                <div className="mb-4">
+                  <button
+                    onClick={() => setExpanded(!isExpanded)}
+                    className="flex items-center gap-2 text-gray-700 hover:text-gray-900 font-medium"
+                  >
+                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    Select Metrics ({selectedMetricsList.length} selected)
+                  </button>
+
+                  {isExpanded && (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 bg-white p-4 rounded-lg">
+                      {metrics.map(metric => (
+                        <label key={metric} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                          <input
+                            type="checkbox"
+                            checked={selectedMetrics[metric]}
+                            onChange={(e) => setSelectedMetrics({
+                              ...selectedMetrics,
+                              [metric]: e.target.checked
+                            })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">{metric}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Input Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  {selectedMetricsList.map(metric => {
+                    const range = referenceRanges[metric];
+                    const value = currentValues[metric];
+                    const outOfRange = isOutOfRange(metric, value);
+
+                    return (
+                      <div key={metric} className="bg-white rounded-lg p-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          {metric}
+                          {range && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              ({range.min}-{range.max} {range.unit})
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={value || ''}
+                          onChange={(e) => setCurrentValues({
+                            ...currentValues,
+                            [metric]: e.target.value
+                          })}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            outOfRange ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                          }`}
+                          placeholder="Enter value"
+                        />
+                        {outOfRange && (
+                          <p className="text-xs text-red-600 mt-1">⚠️ Out of range</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Save Button */}
+                <button
+                  onClick={onSave}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Save Entry
+                </button>
+              </div>
+            );
+          };
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+              <div className="max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h1 className="text-4xl font-bold text-gray-900 mb-2">PathDash</h1>
+                      <p className="text-gray-600">Chemical Pathology Tracking System</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                        <input
+                          type="date"
+                          value={currentDate}
+                          onChange={(e) => setCurrentDate(e.target.value)}
+                          className="bg-transparent border-none focus:outline-none text-gray-800 font-semibold"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setShowTrends(!showTrends)}
+                        className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <TrendingUp className="w-5 h-5" />
+                        {showTrends ? 'Hide Trends' : 'View Trends'}
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
+
+                  {/* Sections */}
+                  {renderSection(
+                    'Section 1: Blood Chemistry',
+                    bloodChemistryMetrics,
+                    selectedBloodMetrics,
+                    setSelectedBloodMetrics,
+                    currentBloodValues,
+                    setCurrentBloodValues,
+                    () => handleSave('Blood Chemistry', currentBloodValues, selectedBloodMetrics),
+                    'bg-blue-50',
+                    'text-blue-900'
+                  )}
+
+                  {renderSection(
+                    'Section 2: Full Blood Count',
+                    fbcMetrics,
+                    selectedFbcMetrics,
+                    setSelectedFbcMetrics,
+                    currentFbcValues,
+                    setCurrentFbcValues,
+                    () => handleSave('Full Blood Count', currentFbcValues, selectedFbcMetrics),
+                    'bg-red-50',
+                    'text-red-900'
+                  )}
+
+                  {renderSection(
+                    'Section 3: Differential',
+                    differentialMetrics,
+                    selectedDiffMetrics,
+                    setSelectedDiffMetrics,
+                    currentDiffValues,
+                    setCurrentDiffValues,
+                    () => handleSave('Differential', currentDiffValues, selectedDiffMetrics),
+                    'bg-green-50',
+                    'text-green-900'
+                  )}
+
+                  {/* Trends Section */}
+                  {showTrends && (
+                    <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-2xl font-semibold text-gray-900">Trend Analysis</h2>
+                        <button 
+                          onClick={() => setShowTrends(false)}
+                          className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                        >
+                          Close
+                        </button>
+                      </div>
+
+                      {savedEntries.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p>No entries saved yet. Add some data to see trends!</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-8">
+                          <div>
+                            <h3 className="text-xl font-semibold text-blue-900 mb-4">Blood Chemistry</h3>
+                            {renderTrends('Blood Chemistry', bloodChemistryMetrics, selectedBloodMetrics)}
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-semibold text-red-900 mb-4">Full Blood Count</h3>
+                            {renderTrends('Full Blood Count', fbcMetrics, selectedFbcMetrics)}
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-semibold text-green-900 mb-4">Differential</h3>
+                            {renderTrends('Differential', differentialMetrics, selectedDiffMetrics)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </section>
+          );
+        };
 
-          {notification && (
-            <div className="fixed bottom-4 right-4 bg-slate-900 text-white px-4 py-2 rounded-lg shadow">
-              {notification}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    function App() {
-      return <BloodChemistryTracker />;
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
+        ReactDOM.render(<BloodChemistryTracker />, document.getElementById('root'));
+    </script>
 </body>
 </html>
